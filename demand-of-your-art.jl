@@ -120,6 +120,8 @@ let
 	)
 	xlabel!("Quantity")
 	ylabel!("Revenue")
+	png("revenue-function")
+	plot!()
 end
 
 # ╔═╡ cdec7db4-75db-4009-86e8-695c9dc1a6c3
@@ -379,6 +381,8 @@ let
 	)
 	xlabel!("Time availability")
 	ylabel!("€")
+	png("revenue-strategy1")
+	plot!()
 end
 
 # ╔═╡ af603777-9d1b-4382-b62f-5d997211c500
@@ -451,6 +455,8 @@ let
 	plot!(plt[2], prices, demands, lab="revenue")
 	plot!(plt[2], [p, p], [0, d * p], c=:lightblue, l=:dash, lab="")
 	scatter!(plt[2], [p], [d * p], c=:red, lab="")
+	png("demand-given-price$selected_product")
+	plot!()
 end
 
 # ╔═╡ 9287c22d-6261-4160-97c8-8b00a01ff48c
@@ -646,24 +652,139 @@ end
 
 # ╔═╡ ecf2f51b-4199-48f8-8575-89ce8ce9a4ab
 let
-	profits = Float64[]
-	slacks = Float64[]
-	for time_availability = 0:80
-		output = optimize_production_nonlinear(time_availability)
-		push!(profits, output[:profit])
+	for max_t = [40, 80]
+		profits = Float64[]
+		slacks = Float64[]
+		for time_availability = 0:max_t
+			output = optimize_production_nonlinear(time_availability)
+			push!(profits, output[:profit])
+		end
+	
+		plt = plot(size=(600, 600))
+		plot!(
+			plt,
+			0:max_t,
+			profits,
+			lab="profits",
+			m=(3, :lightblue, stroke(1, :blue)),
+			c=:blue,
+		)
+		xlabel!("Time availability")
+		ylabel!("€")
+		png("revenue-strategy2-$max_t")
 	end
+	plot!()
+end
 
-	plt = plot(size=(600, 600))
-	plot!(
-		plt,
-		0:80,
-		profits,
-		lab="profits",
-		m=(3, :lightblue, stroke(1, :blue)),
-		c=:blue,
-	)
-	xlabel!("Time availability")
-	ylabel!("€")
+# ╔═╡ a4e70d13-a1ca-4582-b7b7-3b96d4f9de58
+md"""
+---
+Extras for the blog post
+"""
+
+# ╔═╡ e3111d88-3462-47d9-8a7f-8690fe1df371
+let
+	c1 = selling_price[1]
+	c2 = discounted_selling_price[1]
+	x1 = demand[1]
+	x2 = 10
+
+	anim = @animate for prod = range(0, 10, length=80)
+		plt = plot(layout=grid(1, 2), size=(800, 400))
+		f(x, y) = c1 * x + c2 * y
+		contourf!(
+			plt[1],
+			range(0, x1, length=5),
+			range(0, x2 - x1, length=5),
+			f,
+			lab = "",
+			lw=0.2,
+			m = (2,:lightblue),
+			axis_ratio = :equal,
+		)
+		X = min.(x1, prod:-1:0)
+		X = [min(prod, x1), min(prod, x1), 0]
+		Y = [0, prod - min(prod, x1), prod]
+		plot!(plt[1], X, Y, c=:white, lw=2, lab="")
+		scatter!(plt[1], [X[2]], [Y[2]], m=(3,:pink,stroke(1,:red)), lab="")
+		plot!(plt[1], [0, X[1], X[1]], [0, 0, Y[2]], c=:blue, lw=2, lab="")
+		
+		xlims!(plt[1], -0.2, x1 + 0.2)
+		ylims!(plt[1], -0.2, x2 - x1 + 0.2)
+		xlabel!(plt[1], "Normal production")
+		ylabel!(plt[1], "Extra production")
+
+		plot!(plt[2],
+			[0, x1, x2],
+			[0, c1 * x1, c1 * x1 + (x2 - x1) * c2],
+			lab = "",
+			c=:blue,
+			m = (2,:lightblue,stroke(1,:blue)),
+		)
+		plot!(plt[2],
+			[prod, prod],
+			[0, f(X[2],Y[2])],
+			c=:lightblue,
+			lab="",
+		)
+		scatter!(plt[2], [prod], [f(X[2], Y[2])], m=(3,:pink,stroke(1,:red)), lab="")
+		xlabel!("Quantity")
+		ylabel!("Revenue")
+	end
+	gif(anim, "revenue.gif", fps=20)
+end
+
+# ╔═╡ 52d44b98-1da3-4f1a-84a0-db1b8241a40e
+let
+	anim = @animate for t = min.(0:60, 40)
+		output = optimize_production(t)
+		prod_normal = output[:prod_normal]
+		prod_extra = output[:prod_extra]
+		groupedbar(
+			hcat(sum.([prod_extra, prod_normal], dims=2)...),
+	        bar_position = :stack,
+	        bar_width = 0.5,
+	        xticks = (1:length(products), string.(products)),
+			label = ["extra" "normal"],
+		)
+		title!("Available time: $t h")
+		ylims!(0, 7)
+	end
+	gif(anim, "solution-strategy-1.gif", fps=5)
+end
+
+# ╔═╡ 81cc6f5e-c8b7-4e8a-a7d9-36ad501f4b44
+let
+	anim = @animate for t = min.(0:60, 40)
+		output = optimize_production_nonlinear(t)
+		prod = output[:prod]
+		demand = output[:demand]
+		price = output[:price]
+		product_labels = [
+			products[i] * " $(round(price[i], digits=2))"
+			for i = 1:3
+		]
+		bar(
+			(1:3) .- 0.2,
+			prod,
+	        bar_position = :stack,
+	        bar_width = 0.4,
+	        xticks = (1:length(products), product_labels),
+			label="production",
+		)
+		bar!(
+			(1:3) .+ 0.2,
+			demand,
+	        bar_position = :stack,
+	        bar_width = 0.4,
+	        xticks = (1:length(products), product_labels),
+			opacity=0.5,
+			label="demand",
+		)
+		title!("Available time: $t h")
+		ylims!(0, 7)
+	end
+	gif(anim, "solution-strategy-2.gif", fps=5)
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2201,7 +2322,7 @@ version = "1.4.1+0"
 # ╟─ea2a69b8-c883-444e-b09b-9890c551c64d
 # ╟─bad1999d-c085-433c-a42e-d309ae2ae624
 # ╟─f99652cb-bc7e-4400-98bd-3373de0e978b
-# ╟─6991aec5-0d20-4ef3-a85a-668fb2a24334
+# ╠═6991aec5-0d20-4ef3-a85a-668fb2a24334
 # ╟─af603777-9d1b-4382-b62f-5d997211c500
 # ╟─1ef83b37-910c-474f-bc20-0298673ae813
 # ╟─f8c7d28c-ae76-4f29-8f6a-a0492d8c080c
@@ -2219,5 +2340,9 @@ version = "1.4.1+0"
 # ╟─7b68ff21-3ba1-4041-a5a9-ad521624a546
 # ╟─3f0ed7cd-39b6-41a6-8702-95a0fb237065
 # ╟─ecf2f51b-4199-48f8-8575-89ce8ce9a4ab
+# ╟─a4e70d13-a1ca-4582-b7b7-3b96d4f9de58
+# ╟─e3111d88-3462-47d9-8a7f-8690fe1df371
+# ╟─52d44b98-1da3-4f1a-84a0-db1b8241a40e
+# ╠═81cc6f5e-c8b7-4e8a-a7d9-36ad501f4b44
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
